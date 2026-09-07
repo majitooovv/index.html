@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eme Bus - Tu Experiencia de Viaje</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Leaflet CSS for Waze-like Map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- Google Fonts: Inter & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            eme: {
+              DEFAULT: '#005696',   // Official Eme Royal Blue
+              dark: '#0A1E3F',      // Deep Navy Blue
+              light: '#00A3E0',     // Vibrant Cyan Blue
+              orange: '#F58220',    // Official Accent Orange (from website buttons & logo wing)
+              soft: '#EAF4FC',      // Soft blue tint
+              gray: '#F4F7FA'
+            }
+          },
+          fontFamily: {
+            sans: ['Outfit', 'Roboto', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    .leaflet-container {
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+    }
+    
+    /* Accessibility font sizing classes */
+    body.text-large {
+      font-size: 112.5%;
+    }
+    body.text-xlarge {
+      font-size: 125%;
+    }
+
+    .pulse-blue {
+      box-shadow: 0 0 0 0 rgba(0, 86, 150, 0.7);
+      animation: pulse-blue 2s infinite;
+    }
+
+    @keyframes pulse-blue {
+      0% {
+        transform: scale(0.98);
+        box-shadow: 0 0 0 0 rgba(0, 86, 150, 0.7);
+      }
+      70% {
+        transform: scale(1);
+        box-shadow: 0 0 0 10px rgba(0, 86, 150, 0);
+      }
+      100% {
+        transform: scale(0.98);
+        box-shadow: 0 0 0 0 rgba(0, 86, 150, 0);
+      }
+    }
+
+    .scanline {
+      background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(0, 163, 224, 0.5), rgba(255,255,255,0));
+      animation: scan 2s linear infinite;
+    }
+
+    @keyframes scan {
+      0% { top: 0%; }
+      100% { top: 100%; }
+    }
+
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f1f1;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #005696;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+
+<body class="h-full text-slate-800 antialiased bg-slate-900 flex justify-center selection:bg-eme-light selection:text-white">
+
+  <!-- Main Mobile Shell container (simulating high quality smartphone UI or responsive full view) -->
+  <div id="app-container" class="w-full max-w-md bg-white min-h-screen flex flex-col justify-between shadow-2xl relative overflow-hidden transition-all duration-200">
+
+    <!-- TOP HEADER WITH OFFICIAL EME BUS LOGO & COLORS -->
+    <header class="bg-white border-b border-slate-200 px-4 pt-3 pb-3 sticky top-0 z-40 text-slate-800 shadow-sm">
+      <div class="flex items-center justify-between">
+        <!-- Brand Logo Official Eme Bus Style -->
+        <div class="flex items-center space-x-1 cursor-pointer" onclick="switchTab('pasajes')">
+          <div class="relative flex items-center">
+            <!-- Official stylized lower-case 'eme' logo -->
+            <div class="flex items-baseline">
+              <span class="font-extrabold italic text-3xl text-eme tracking-tighter" style="font-family: sans-serif; transform: skewX(-10deg);">eme</span>
+              <div class="ml-1 flex flex-col justify-center">
+                <span class="font-black text-xs text-eme-light tracking-widest leading-none" style="transform: skewX(-10deg);">BUS<span class="text-[9px] text-eme-orange">.CL</span></span>
+              </div>
+            </div>
+            <!-- Logo Orange Swoosh Wing -->
+            <div class="ml-1.5 w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[18px] border-b-eme-orange rotate-45 transform"></div>
+          </div>
+        </div>
+
+        <!-- Top Right Actions: Senior Mode, Audio & Profile -->
+        <div class="flex items-center space-x-2">
+          <!-- Text Size Toggle button -->
+          <button id="btn-font-size" onclick="toggleFontSize()" title="Cambiar tamaño de texto" class="bg-slate-100 hover:bg-slate-200 text-eme p-2 rounded-full w-9 h-9 flex items-center justify-center transition border border-slate-300 active:scale-95">
+            <span class="font-bold text-xs">A<span class="text-[10px]">A</span></span>
+          </button>
+
+          <!-- TTS Audio Assistant button -->
+          <button id="btn-speech" onclick="readActiveStatus()" title="Escuchar estado de viaje" class="bg-eme-soft hover:bg-sky-100 text-eme p-2 rounded-full w-9 h-9 flex items-center justify-center transition border border-sky-200 active:scale-95">
+            <i class="fa-solid fa-volume-high text-xs"></i>
+          </button>
+
+          <!-- Eme Puntos Quick Badge in Official Orange -->
+          <button onclick="switchTab('puntos')" class="bg-eme-orange text-white font-extrabold px-3 py-1 rounded-full text-xs flex items-center space-x-1 shadow active:scale-95">
+            <i class="fa-solid fa-star text-yellow-200 text-xs"></i>
+            <span id="header-points">1,450 pts</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Live Notification Banner (Official Eme Orange Gradient) -->
+      <div id="live-push-banner" class="mt-2.5 bg-gradient-to-r from-eme to-eme-light text-white p-2.5 rounded-xl text-xs font-semibold flex items-center justify-between shadow-md">
+        <div class="flex items-center space-x-2 overflow-hidden">
+          <div class="bg-eme-orange text-white w-7 h-7 rounded-lg flex items-center justify-center shrink-0">
+            <i class="fa-solid fa-bell text-xs animate-bounce"></i>
+          </div>
+          <div class="truncate">
+            <span id="push-title" class="font-bold block text-[11px] uppercase tracking-wide text-yellow-300">Próxima Salida de Bus</span>
+            <span id="push-desc" class="truncate text-[11px]">Máquina #158 sale en <strong class="underline font-extrabold">18 min</strong> desde Andén 14</span>
+          </div>
+        </div>
+        <button onclick="switchTab('terminal')" class="bg-eme-orange hover:bg-amber-600 text-white px-2.5 py-1 rounded-lg text-[11px] font-extrabold shrink-0 ml-1 shadow">
+          Ver Andén
+        </button>
+      </div>
+    </header>
+
+    <!-- MAIN CONTENT VIEW CANVAS -->
+    <main class="flex-1 overflow-y-auto relative pb-20 bg-slate-50">
+
+      <!-- TAB 1: MIS PASAJES & TICKETS -->
+      <section id="tab-pasajes" class="tab-content p-4 space-y-4">
+        <!-- Welcome User Greeting with Official Emito Mascot Reference -->
+        <div class="bg-gradient-to-r from-eme-dark via-eme to-eme-light text-white p-4 rounded-2xl shadow-md relative overflow-hidden">
+          <div class="absolute -right-2 -bottom-2 opacity-20 text-white">
+            <i class="fa-solid fa-bus text-8xl"></i>
+          </div>
+          <div class="flex justify-between items-start relative z-10">
+            <div class="flex items-center space-x-3">
+              <!-- Emito Mascot Icon Avatar -->
+              <div class="w-12 h-12 bg-white rounded-full border-2 border-eme-orange p-1 flex items-center justify-center shadow">
+                <i class="fa-solid fa-bus-simple text-eme text-2xl"></i>
+              </div>
+              <div>
+                <p class="text-sky-200 text-xs font-medium">¡Hola de nuevo! Soy Emito 👋</p>
+                <h2 id="user-display-name" class="text-lg font-black tracking-tight">Juan Carlos Pérez</h2>
+                <p class="text-[11px] text-white/80">RUT: 15.482.903-K</p>
+              </div>
+            </div>
+            <button onclick="openOnboardingModal()" class="bg-white/20 hover:bg-white/30 text-white px-2.5 py-1 rounded-full text-xs font-medium flex items-center space-x-1 border border-white/30 backdrop-blur-sm">
+              <i class="fa-solid fa-circle-question text-eme-orange"></i>
+              <span>Guía</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Active Trip Card (Primary Focus) -->
+        <div class="space-y-2">
+          <div class="flex justify-between items-center px-1">
+            <h3 class="font-bold text-slate-800 text-base flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-eme-orange inline-block animate-ping"></span>
+              Próximo Pasaje Activo
+            </h3>
+            <span class="bg-sky-100 text-eme text-xs font-bold px-2.5 py-0.5 rounded-full border border-sky-300">
+              Confirmado
+            </span>
+          </div>
+
+          <!-- Main Ticket Card -->
+          <div class="bg-white rounded-2xl border-2 border-eme shadow-lg overflow-hidden transition-all">
+            <div class="bg-eme text-white px-4 py-2.5 flex justify-between items-center text-xs">
+              <div class="flex items-center space-x-2">
+                <i class="fa-solid fa-bus-simple text-eme-orange text-sm"></i>
+                <span class="font-bold">Máquina N° <span id="ticket-bus-num" class="text-eme-orange text-sm font-extrabold">158</span></span>
+              </div>
+              <span class="bg-white/20 px-2 py-0.5 rounded text-[11px] font-bold">Suite Cama Premium</span>
+            </div>
+
+            <div class="p-4 space-y-3">
+              <!-- Route Display -->
+              <div class="flex items-center justify-between">
+                <div class="text-left w-2/5">
+                  <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Origen</span>
+                  <p id="ticket-origin" class="font-extrabold text-slate-900 text-base leading-snug">Santiago</p>
+                  <p class="text-[11px] text-slate-500 truncate">Term. Alameda</p>
+                </div>
+
+                <div class="flex flex-col items-center justify-center w-1/5">
+                  <i class="fa-solid fa-arrow-right-long text-eme text-lg"></i>
+                  <span class="text-[9px] font-bold text-eme bg-eme-soft px-1.5 py-0.5 rounded mt-1">Directo</span>
+                </div>
+
+                <div class="text-right w-2/5">
+                  <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Destino</span>
+                  <p id="ticket-dest" class="font-extrabold text-slate-900 text-base leading-snug">Concepción</p>
+                  <p class="text-[11px] text-slate-500 truncate">Term. Collao</p>
+                </div>
+              </div>
+
+              <div class="border-t border-dashed border-slate-200 pt-3 grid grid-cols-3 gap-2 text-center bg-sky-50/60 p-2.5 rounded-xl">
+                <div>
+                  <span class="text-[10px] text-slate-400 font-semibold uppercase block">Fecha</span>
+                  <span id="ticket-date" class="font-bold text-slate-800 text-xs">Hoy, 15 Oct</span>
+                </div>
+                <button onclick="switchTab('terminal')" class="border-x border-slate-200 hover:bg-sky-100 rounded">
+                  <span class="text-[10px] text-slate-400 font-semibold uppercase block">Salida / Andén</span>
+                  <span id="ticket-time" class="font-extrabold text-eme text-xs flex items-center justify-center gap-0.5">
+                    14:30 h <i class="fa-solid fa-location-dot text-[10px] text-eme-orange"></i>
+                  </span>
+                </button>
+                <div>
+                  <span class="text-[10px] text-slate-400 font-semibold uppercase block">Asiento</span>
+                  <span id="ticket-seat" class="font-bold text-slate-800 text-xs">24 (Piso 2)</span>
+                </div>
+              </div>
+
+              <!-- Ticket Action Buttons -->
+              <div class="grid grid-cols-2 gap-2 pt-1">
+                <button onclick="openQRModal()" class="w-full bg-eme hover:bg-eme-dark text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center space-x-1.5 shadow active:scale-95">
+                  <i class="fa-solid fa-qrcode text-base"></i>
+                  <span>Mostrar Pasaje / QR</span>
+                </button>
+                <button onclick="switchTab('map')" class="w-full bg-eme-orange hover:bg-amber-600 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center space-x-1.5 shadow active:scale-95">
+                  <i class="fa-solid fa-location-crosshairs text-white text-sm"></i>
+                  <span>Seguir Bus Waze</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Highway Passenger Quick Alert Card -->
+        <div class="bg-amber-50 border-2 border-amber-300 rounded-2xl p-3.5 flex items-center justify-between shadow-sm">
+          <div class="flex items-center space-x-3">
+            <div class="bg-eme-orange text-white p-2.5 rounded-xl font-bold">
+              <i class="fa-solid fa-road text-lg"></i>
+            </div>
+            <div>
+              <h4 class="font-bold text-slate-900 text-xs">¿Subes en Carretera / Cruce?</h4>
+              <p class="text-[11px] text-slate-600">Activa el radar GPS para avisarte cuándo esté llegando la máquina.</p>
+            </div>
+          </div>
+          <button onclick="switchTab('carretera')" class="bg-eme hover:bg-eme-dark text-white font-extrabold text-xs px-3 py-2 rounded-xl shrink-0 shadow">
+            Radar
+          </button>
+        </div>
+
+        <!-- History & Upcoming Trips -->
+        <div class="pt-2">
+          <h3 class="font-bold text-slate-800 text-sm mb-2.5 flex items-center justify-between">
+            <span>Historial de Pasajes</span>
+            <span class="text-xs font-semibold text-eme">3 viajes realizados</span>
+          </h3>
+
+          <div class="space-y-2">
+            <!-- Sample Past Ticket 1 -->
+            <div class="bg-white p-3 rounded-xl border border-slate-200 flex justify-between items-center text-xs shadow-sm">
+              <div class="flex items-center space-x-3">
+                <div class="bg-sky-50 p-2 rounded-lg text-eme">
+                  <i class="fa-solid fa-circle-check text-eme text-sm"></i>
+                </div>
+                <div>
+                  <p class="font-bold text-slate-800">Concepción ➔ Viña del Mar</p>
+                  <p class="text-[11px] text-slate-400">02 Oct 2026 • Máquina #124</p>
+                </div>
+              </div>
+              <span class="font-bold text-slate-700">$18.500</span>
+            </div>
+
+            <!-- Sample Past Ticket 2 -->
+            <div class="bg-white p-3 rounded-xl border border-slate-200 flex justify-between items-center text-xs shadow-sm">
+              <div class="flex items-center space-x-3">
+                <div class="bg-sky-50 p-2 rounded-lg text-eme">
+                  <i class="fa-solid fa-circle-check text-eme text-sm"></i>
+                </div>
+                <div>
+                  <p class="font-bold text-slate-800">Chillán ➔ Santiago</p>
+                  <p class="text-[11px] text-slate-400">18 Sep 2026 • Máquina #190</p>
+                </div>
+              </div>
+              <span class="font-bold text-slate-700">$14.000</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: TERMINAL & ANDEN GPS -->
+      <section id="tab-terminal" class="tab-content hidden p-4 space-y-4">
+        <div class="bg-eme text-white p-4 rounded-2xl shadow">
+          <div class="flex items-center space-x-3">
+            <i class="fa-solid fa-satellite-dish text-eme-orange text-2xl animate-pulse"></i>
+            <div>
+              <h2 class="font-extrabold text-lg">GPS Ubicación & Terminal</h2>
+              <p class="text-xs text-sky-100">Detección automática de tu terminal y andén asignado</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Terminal Finder Status Card -->
+        <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-3">
+          <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+            <span class="text-xs font-bold text-slate-500 uppercase tracking-wide">Terminal Detectado por GPS</span>
+            <button onclick="getGPSLocation()" class="text-xs text-eme font-bold hover:underline flex items-center gap-1">
+              <i class="fa-solid fa-rotate text-[10px]"></i> Actualizar GPS
+            </button>
+          </div>
+
+          <div id="terminal-detector-box" class="flex items-start space-x-3 bg-sky-50/70 p-3 rounded-xl border border-sky-200">
+            <div class="bg-eme text-white p-2.5 rounded-lg text-lg shrink-0">
+              <i class="fa-solid fa-building-user"></i>
+            </div>
+            <div>
+              <p id="current-terminal-name" class="font-extrabold text-slate-900 text-sm">Terminal Alameda - Santiago</p>
+              <p id="current-terminal-address" class="text-xs text-slate-600 mt-0.5">Av. Bernardo O'Higgins #3850, Estación Central</p>
+              <p id="terminal-distance-badge" class="text-[11px] font-bold text-eme mt-1 flex items-center gap-1">
+                <i class="fa-solid fa-location-dot text-eme-orange"></i> Estás a 120 metros dentro del Terminal
+              </p>
+            </div>
+          </div>
+
+          <!-- Gate / Anden Big Display -->
+          <div class="bg-eme-dark text-white rounded-2xl p-4 text-center space-y-2 border-2 border-eme-orange">
+            <span class="text-xs font-bold text-eme-orange uppercase tracking-widest block">Tu Bus Máquina #158 aborda en</span>
+            <div class="py-1">
+              <span id="display-anden-number" class="text-5xl font-black text-white tracking-tight">ANDÉN 14</span>
+            </div>
+            <div class="flex items-center justify-center space-x-2 text-xs text-slate-300">
+              <i class="fa-solid fa-clock text-eme-orange"></i>
+              <span>Salida programada: <strong class="text-white">14:30 hrs</strong> (Faltan 18 mins)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Boarding Status Checklist for Seniors & Travelers -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+          <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+            <i class="fa-solid fa-clipboard-check text-eme"></i>
+            Pasos para Tu Abordaje Tranquilo
+          </h3>
+
+          <ul class="space-y-2 text-xs text-slate-700">
+            <li class="flex items-start space-x-2.5 bg-slate-50 p-2 rounded-lg">
+              <i class="fa-solid fa-circle-check text-eme text-sm mt-0.5"></i>
+              <span>Ten a mano tu <strong>Cédula de Identidad</strong> y el pasaje QR en la app.</span>
+            </li>
+            <li class="flex items-start space-x-2.5 bg-slate-50 p-2 rounded-lg">
+              <i class="fa-solid fa-suitcase-rolling text-eme-orange text-sm mt-0.5"></i>
+              <span>Entrega tu equipaje en el maletero de la <strong>Máquina N° 158</strong> y exige tu ticket de equipaje.</span>
+            </li>
+            <li class="flex items-start space-x-2.5 bg-slate-50 p-2 rounded-lg">
+              <i class="fa-solid fa-shield-halved text-sky-600 text-sm mt-0.5"></i>
+              <span>Si necesitas asistencia de embarque para adulto mayor o silla de ruedas, solicítala con la tripulación en el andén.</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Switch Terminal Simulator selector for testing -->
+        <div class="bg-slate-100 p-3 rounded-xl text-center space-y-2 border border-slate-200">
+          <span class="text-[11px] font-bold text-slate-500 uppercase block">Simular Ubicación de Terminal</span>
+          <div class="grid grid-cols-2 gap-1.5 text-xs">
+            <button onclick="setSimulatedTerminal('Terminal Alameda - Santiago', 'Av. Bernardo O\'Higgins #3850', 'Andén 14')" class="bg-white hover:bg-slate-200 p-2 rounded border font-medium text-slate-800">
+              Santiago (Alameda)
+            </button>
+            <button onclick="setSimulatedTerminal('Terminal Collao - Concepción', 'Tegualda #0360, Concepción', 'Andén 06')" class="bg-white hover:bg-slate-200 p-2 rounded border font-medium text-slate-800">
+              Concepción (Collao)
+            </button>
+            <button onclick="setSimulatedTerminal('Terminal Maria Teresa - Chillán', 'Av. Brasil #850, Chillán', 'Andén 03')" class="bg-white hover:bg-slate-200 p-2 rounded border font-medium text-slate-800">
+              Chillán
+            </button>
+            <button onclick="setSimulatedTerminal('Terminal Rodoviario Viña del Mar', 'Valparaíso #1055, Viña', 'Andén 09')" class="bg-white hover:bg-slate-200 p-2 rounded border font-medium text-slate-800">
+              Viña del Mar
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: EME TRACK - LIVE MAP (WAZE STYLE IN EME BLUE/ORANGE) -->
+      <section id="tab-map" class="tab-content hidden h-full flex flex-col p-3 space-y-3">
+        <!-- Map Header bar -->
+        <div class="bg-eme-dark text-white p-3 rounded-2xl flex items-center justify-between shadow">
+          <div class="flex items-center space-x-2">
+            <div class="bg-eme-orange text-white font-black px-2 py-1 rounded text-xs">
+              LIVE
+            </div>
+            <div>
+              <h2 class="font-extrabold text-sm leading-tight">Eme Track en Ruta</h2>
+              <p class="text-[11px] text-sky-200">GPS Máquina #158 • Santiago ➔ Concepción</p>
+            </div>
+          </div>
+          <div class="text-right">
+            <span class="text-[10px] text-sky-300 font-mono block">VELOCIDAD</span>
+            <span id="bus-speed-display" class="font-black text-white text-sm">88 km/h</span>
+          </div>
+        </div>
+
+        <!-- Interactive Map Frame -->
+        <div class="relative w-full h-80 bg-slate-200 rounded-2xl overflow-hidden shadow-inner border-2 border-slate-300">
+          <div id="waze-map"></div>
+
+          <!-- Waze Overlay floating indicator -->
+          <div class="absolute top-3 left-3 z-20 bg-eme-dark/90 text-white backdrop-blur-md px-3 py-1.5 rounded-xl text-xs font-semibold shadow border border-white/10 flex items-center space-x-2">
+            <i class="fa-solid fa-location-arrow text-eme-light animate-spin"></i>
+            <span>Ruta 5 Sur • Tráfico Fluido</span>
+          </div>
+
+          <div class="absolute bottom-3 right-3 z-20 bg-white text-slate-900 p-2 rounded-xl text-xs font-bold shadow-lg border border-slate-200 flex flex-col gap-1">
+            <button onclick="centerMapOnBus()" class="bg-eme text-white px-2.5 py-1 rounded-lg flex items-center gap-1 active:scale-95">
+              <i class="fa-solid fa-crosshairs"></i> Centrar Bus
+            </button>
+          </div>
+        </div>
+
+        <!-- Live Route Progress Bar Widget -->
+        <div class="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm space-y-2">
+          <div class="flex justify-between text-xs font-bold">
+            <span class="text-slate-600">Avance de la Ruta: <strong id="route-percent-text" class="text-eme">45%</strong></span>
+            <span class="text-slate-500">Llegada est. <strong id="route-eta-text" class="text-slate-900">18:45 hrs</strong></span>
+          </div>
+
+          <!-- Progress Bar track -->
+          <div class="w-full bg-slate-100 h-3 rounded-full overflow-hidden p-0.5 border border-slate-200">
+            <div id="route-progress-bar" class="bg-gradient-to-r from-eme to-eme-light h-full rounded-full transition-all duration-500 w-[45%]"></div>
+          </div>
+
+          <!-- Next Stop Banner -->
+          <div class="flex items-center justify-between text-xs pt-1">
+            <span class="text-slate-500">Próxima parada aproximada:</span>
+            <span class="font-extrabold text-slate-800 bg-sky-50 px-2 py-0.5 rounded text-eme">Cruce Talca / San Javier</span>
+          </div>
+        </div>
+
+        <!-- Simulation Controls for user interaction -->
+        <div class="bg-slate-100 p-3 rounded-xl text-xs space-y-2 border border-slate-200">
+          <div class="flex justify-between items-center font-bold text-slate-600">
+            <span>Simulador de Avance del Bus</span>
+            <button onclick="toggleBusSimulation()" id="btn-sim-toggle" class="bg-eme text-white px-2.5 py-1 rounded-lg text-[11px]">
+              <i class="fa-solid fa-play text-[10px]"></i> Iniciar Avance
+            </button>
+          </div>
+          <input type="range" id="sim-slider" min="0" max="100" value="45" oninput="updateBusSimulationPosition(this.value)" class="w-full accent-eme cursor-pointer">
+        </div>
+      </section>
+
+      <!-- TAB 4: PASAJEROS EN CARRETERA RADAR -->
+      <section id="tab-carretera" class="tab-content hidden p-4 space-y-4">
+        <div class="bg-gradient-to-r from-eme to-eme-light text-white p-4 rounded-2xl shadow">
+          <div class="flex items-center space-x-3">
+            <div class="bg-eme-orange text-white p-2.5 rounded-xl text-xl font-bold">
+              <i class="fa-solid fa-radar"></i>
+            </div>
+            <div>
+              <h2 class="font-black text-lg leading-tight">Radar de Carretera</h2>
+              <p class="text-xs font-semibold text-sky-100">Especial para abordajes en cruces y paradas de ruta</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+          <h3 class="font-bold text-slate-800 text-sm border-b pb-2">Selecciona tu Punto de Encuentro</h3>
+
+          <div>
+            <label class="text-xs font-bold text-slate-500 block mb-1">Cruce o Parada asignada en tu pasaje:</label>
+            <select id="highway-stop-select" onchange="updateHighwayRadar()" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-eme focus:outline-none">
+              <option value="cruce-agua">Cruce Agua de la Gloria (Ruta Itata)</option>
+              <option value="peaje-quepe">Peaje Quepe / Parada Temuco Norte</option>
+              <option value="parada-cabrero">Cruce Cabrero (Ruta 146)</option>
+              <option value="parada-san-carlos">San Carlos - Parada Panamericana</option>
+            </select>
+          </div>
+
+          <!-- Radar Visual Widget in Eme Dark Blue -->
+          <div class="bg-eme-dark rounded-2xl p-5 text-center text-white relative overflow-hidden pulse-blue border-2 border-eme-light">
+            <div class="text-xs font-bold text-eme-light uppercase tracking-widest mb-1">
+              Distancia Actual del Bus
+            </div>
+
+            <div class="my-2">
+              <span id="highway-bus-dist" class="text-4xl font-black text-white">3.8 km</span>
+              <span class="text-xs text-slate-300 block font-medium mt-1">Aproximadamente <strong id="highway-bus-time" class="text-eme-orange text-sm">6 minutos</strong> de llegada</span>
+            </div>
+
+            <!-- Animated Radar Sweep -->
+            <div class="w-20 h-20 mx-auto my-3 border-2 border-eme-light/40 rounded-full flex items-center justify-center relative">
+              <div class="w-12 h-12 border border-eme-light/60 rounded-full flex items-center justify-center">
+                <i class="fa-solid fa-bus text-eme-orange text-lg animate-pulse"></i>
+              </div>
+            </div>
+
+            <p id="highway-status-msg" class="text-xs bg-slate-800 p-2 rounded-xl text-slate-200 border border-slate-700">
+              ⚠️ ¡Mantente en un lugar visible y seguro! Haz señas de luz si es de noche.
+            </p>
+          </div>
+
+          <button onclick="triggerHighwayAudioNotice()" class="w-full bg-eme-orange hover:bg-amber-600 text-white font-extrabold py-3 px-4 rounded-xl text-xs flex items-center justify-center space-x-2 shadow">
+            <i class="fa-solid fa-volume-high text-sm"></i>
+            <span>Activar Alerta Sonora de Cercanía</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- TAB 5: EME PUNTOS (LOYALTY) -->
+      <section id="tab-puntos" class="tab-content hidden p-4 space-y-4">
+        <div class="bg-gradient-to-br from-eme-dark via-eme to-eme-light text-white p-5 rounded-2xl shadow-lg relative overflow-hidden">
+          <div class="absolute -right-6 -bottom-6 opacity-20 text-white">
+            <i class="fa-solid fa-crown text-9xl"></i>
+          </div>
+
+          <div class="relative z-10 space-y-3">
+            <div class="flex justify-between items-center">
+              <span class="bg-eme-orange text-white font-black px-2.5 py-0.5 rounded-full text-[10px] tracking-wider uppercase">Pasajero Frecuente Gold</span>
+              <span class="text-xs text-sky-200 font-mono">ID: 884-291</span>
+            </div>
+
+            <div>
+              <p class="text-xs text-white/80 uppercase tracking-wide">Eme Puntos Disponibles</p>
+              <h2 id="puntos-total-amount" class="text-4xl font-black text-yellow-300 tracking-tight">1,450 pts</h2>
+            </div>
+
+            <p class="text-[11px] text-slate-200">Equivalente a <strong class="text-white">$14.500 CLP</strong> de descuento en tus próximos pasajes.</p>
+          </div>
+        </div>
+
+        <!-- Earn Puntos Action Card -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+          <h3 class="font-bold text-slate-800 text-sm">¿Cómo acumular más Eme Puntos?</h3>
+
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 flex flex-col justify-between">
+              <i class="fa-solid fa-ticket text-eme text-lg mb-1"></i>
+              <span class="font-bold text-slate-800">Por cada viaje</span>
+              <span class="text-[10px] text-slate-500">Ganas el 10% del valor del pasaje</span>
+            </div>
+            <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 flex flex-col justify-between">
+              <i class="fa-solid fa-mobile-screen text-eme text-lg mb-1"></i>
+              <span class="font-bold text-slate-800">Uso de App</span>
+              <span class="text-[10px] text-slate-500">+100 pts bonus por comprar desde la app</span>
+            </div>
+          </div>
+
+          <button onclick="simulateAddPoints()" class="w-full bg-eme hover:bg-eme-dark text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center space-x-1.5 shadow active:scale-95">
+            <i class="fa-solid fa-plus-circle text-eme-orange"></i>
+            <span>Simular Acumulación de Puntos por Viaje</span>
+          </button>
+        </div>
+
+        <!-- Catalog of Rewards -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+          <h3 class="font-bold text-slate-800 text-sm">Canjear Beneficios</h3>
+
+          <div class="space-y-2">
+            <div class="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+              <div class="flex items-center space-x-2.5">
+                <div class="bg-sky-100 text-eme p-2 rounded-lg font-bold">
+                  <i class="fa-solid fa-tag"></i>
+                </div>
+                <div>
+                  <p class="font-bold text-slate-800">Descuento de $5.000</p>
+                  <p class="text-[10px] text-slate-500">Para cualquier destino Eme Bus</p>
+                </div>
+              </div>
+              <button onclick="redeemBenefit('Descuento $5.000', 500)" class="bg-eme text-white font-bold px-3 py-1.5 rounded-lg text-xs hover:bg-eme-dark">
+                500 pts
+              </button>
+            </div>
+
+            <div class="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+              <div class="flex items-center space-x-2.5">
+                <div class="bg-sky-100 text-eme p-2 rounded-lg font-bold">
+                  <i class="fa-solid fa-couch"></i>
+                </div>
+                <div>
+                  <p class="font-bold text-slate-800">Upgrade a Suite Cama</p>
+                  <p class="text-[10px] text-slate-500">Mejora de asiento sin costo extra</p>
+                </div>
+              </div>
+              <button onclick="redeemBenefit('Upgrade Cama Suite', 800)" class="bg-eme text-white font-bold px-3 py-1.5 rounded-lg text-xs hover:bg-eme-dark">
+                800 pts
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 6: RECLAMOS, CONSULTAS Y CONTACTO -->
+      <section id="tab-reclamos" class="tab-content hidden p-4 space-y-4">
+        <div class="bg-eme-dark text-white p-4 rounded-2xl shadow">
+          <h2 class="font-extrabold text-lg flex items-center gap-2">
+            <i class="fa-solid fa-headset text-eme-orange"></i>
+            Atención al Pasajero & Reclamos
+          </h2>
+          <p class="text-xs text-sky-200 mt-0.5">Estamos para ayudarte antes, durante y después de tu viaje</p>
+        </div>
+
+        <!-- Quick Emergency Direct Contacts -->
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <a href="tel:6006000100" class="bg-sky-50 border border-sky-200 p-3 rounded-2xl flex items-center space-x-2.5 text-eme hover:bg-sky-100 shadow-sm">
+            <i class="fa-solid fa-phone text-lg text-eme"></i>
+            <div>
+              <span class="font-bold block">Call Center</span>
+              <span class="text-[10px] text-slate-600">600 600 0100</span>
+            </div>
+          </a>
+
+          <button onclick="openWhatsAppSim()" class="bg-emerald-50 border border-emerald-300 p-3 rounded-2xl flex items-center space-x-2.5 text-emerald-900 hover:bg-emerald-100 shadow-sm">
+            <i class="fa-brands fa-whatsapp text-2xl text-emerald-600"></i>
+            <div>
+              <span class="font-bold block">WhatsApp Oficial</span>
+              <span class="text-[10px] text-slate-600">Respuesta Rápida</span>
+            </div>
+          </button>
+        </div>
+
+        <!-- Claims and Inquiries Form -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+          <h3 class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+            <i class="fa-solid fa-pen-to-square text-eme"></i>
+            Enviar Reclamo o Consulta
+          </h3>
+
+          <form id="claim-form" onsubmit="handleClaimSubmit(event)" class="space-y-3 text-xs">
+            <div>
+              <label class="font-bold text-slate-600 block mb-1">Categoría del Mensaje:</label>
+              <select required id="claim-category" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-slate-800 focus:ring-2 focus:ring-eme focus:outline-none font-medium">
+                <option value="Atraso o Horario">Atraso o Horario de Bus</option>
+                <option value="Equipaje">Inconveniente con Equipaje</option>
+                <option value="Atención a bordo">Atención a Bordo / Conducción</option>
+                <option value="Consulta General">Consulta de Pasajes o Horarios</option>
+                <option value="Felicitación">Felicitaciones al Servicio</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="font-bold text-slate-600 block mb-1">N° de Pasaje o Máquina (Opcional):</label>
+              <input type="text" id="claim-ticket-num" placeholder="Ej: EME-89321 o Bus 158" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-slate-800 focus:ring-2 focus:ring-eme focus:outline-none">
+            </div>
+
+            <div>
+              <label class="font-bold text-slate-600 block mb-1">Detalle del Reclamo o Consulta:</label>
+              <textarea required id="claim-message" rows="3" placeholder="Describe claramente lo sucedido para poder resolverlo rápidamente..." class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-slate-800 focus:ring-2 focus:ring-eme focus:outline-none"></textarea>
+            </div>
+
+            <button type="submit" class="w-full bg-eme hover:bg-eme-dark text-white font-extrabold py-3 px-4 rounded-xl shadow active:scale-95 text-xs flex items-center justify-center space-x-2">
+              <i class="fa-solid fa-paper-plane"></i>
+              <span>Enviar Formulario a Eme Bus</span>
+            </button>
+          </form>
+        </div>
+
+        <!-- FAQ Accordion -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-2">
+          <h3 class="font-bold text-slate-800 text-sm mb-2">Preguntas Frecuentes</h3>
+
+          <details class="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-xs">
+            <summary class="font-bold text-slate-800 cursor-pointer">¿Con cuánta anticipación debo estar en el andén?</summary>
+            <p class="text-slate-600 mt-2 text-[11px] leading-relaxed">Recomendamos estar 15 a 20 minutos antes de la hora programada de salida indicada en tu pasaje digital.</p>
+          </details>
+
+          <details class="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-xs">
+            <summary class="font-bold text-slate-800 cursor-pointer">¿Debo llevar mi pasaje impreso?</summary>
+            <p class="text-slate-600 mt-2 text-[11px] leading-relaxed">No es necesario. Puedes mostrar el código QR directamente desde esta aplicación en tu celular.</p>
+          </details>
+
+          <details class="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-xs">
+            <summary class="font-bold text-slate-800 cursor-pointer">¿Puedo viajar con mascotas (Pet Friendly)?</summary>
+            <p class="text-slate-600 mt-2 text-[11px] leading-relaxed">Sí, Eme Bus cuenta con servicios Pet Friendly en servicios autorizados. Revisa la normativa previa en nuestro sitio web.</p>
+          </details>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- BOTTOM NAVIGATION BAR IN EME BRAND STYLES -->
+    <nav class="bg-white border-t border-slate-200 fixed bottom-0 left-0 right-0 max-w-md mx-auto z-40 px-2 py-1.5 shadow-2xl">
+      <div class="grid grid-cols-6 gap-0.5 text-center">
+        <!-- Tab 1: Pasajes -->
+        <button onclick="switchTab('pasajes')" id="nav-pasajes" class="nav-btn active text-eme flex flex-col items-center py-1 rounded-xl transition">
+          <i class="fa-solid fa-ticket text-lg"></i>
+          <span class="text-[10px] font-bold mt-0.5">Pasajes</span>
+        </button>
+
+        <!-- Tab 2: Terminal/Andén -->
+        <button onclick="switchTab('terminal')" id="nav-terminal" class="nav-btn text-slate-400 hover:text-eme flex flex-col items-center py-1 rounded-xl transition">
+          <i class="fa-solid fa-building-user text-lg"></i>
+          <span class="text-[10px] font-bold mt-0.5">Andén GPS</span>
+        </button>
+
+        <!-- Tab 3: Map Tracker -->
+        <button onclick="switchTab('map')" id="nav-map" class="nav-btn text-slate-400 hover:text-eme flex flex-col items-center py-1 rounded-xl transition relative">
+          <i class="fa-solid fa-map-location-dot text-lg"></i>
+          <span class="text-[10px] font-bold mt-0.5">Eme Track</span>
+          <span class="absolute top-1 right-2 w-2 h-2 rounded-full bg-eme-orange animate-ping"></span>
+        </button>
+
+        <!-- Tab 4: Carretera Radar -->
+        <button onclick="switchTab('carretera')" id="nav-carretera" class="nav-btn text-slate-400 hover:text-eme flex flex-col items-center py-1 rounded-xl transition">
+          <i class="fa-solid fa-road text-lg"></i>
+          <span class="text-[10px] font-bold mt-0.5">Carretera</span>
+        </button>
+
+        <!-- Tab 5: Eme Puntos -->
+        <button onclick="switchTab('puntos')" id="nav-puntos" class="nav-btn text-slate-400 hover:text-eme flex flex-col items-center py-1 rounded-xl transition">
+          <i class="fa-solid fa-star text-lg"></i>
+          <span class="text-[10px] font-bold mt-0.5">Puntos</span>
+        </button>
+
+        <!-- Tab 6: Reclamos/Contacto -->
+        <button onclick="switchTab('reclamos')" id="nav-reclamos" class="nav-btn text-slate-400 hover:text-eme flex flex-col items-center py-1 rounded-xl transition">
+          <i class="fa-solid fa-headset text-lg"></i>
+          <span class="text-[10px] font-bold mt-0.5">Soporte</span>
+        </button>
+      </div>
+    </nav>
+
+    <!-- MODAL 1: TICKET QR CODE DISPLAY -->
+    <div id="qr-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+      <div class="bg-white rounded-3xl max-w-xs w-full overflow-hidden shadow-2xl border-2 border-eme">
+        <div class="bg-eme text-white p-4 text-center relative">
+          <button onclick="closeQRModal()" class="absolute right-3 top-3 bg-white/20 hover:bg-white/30 p-1.5 rounded-full w-7 h-7 flex items-center justify-center">
+            <i class="fa-solid fa-xmark text-sm"></i>
+          </button>
+          <p class="text-xs text-sky-200 uppercase font-bold tracking-widest">Escanea al Abordar</p>
+          <h3 class="text-lg font-black">Pasaje Máquina #158</h3>
+        </div>
+
+        <div class="p-5 text-center space-y-4">
+          <!-- Animated QR Code graphic -->
+          <div class="relative w-48 h-48 mx-auto bg-slate-100 p-3 rounded-2xl border-2 border-dashed border-eme flex items-center justify-center overflow-hidden">
+            <!-- Simulated QR Pattern -->
+            <svg class="w-full h-full text-slate-800" viewBox="0 0 100 100" fill="currentColor">
+              <path d="M0,0 h30 v30 h-30 z M10,10 h10 v10 h-10 z M70,0 h30 v30 h-30 z M80,10 h10 v10 h-10 z M0,70 h30 v30 h-30 z M10,80 h10 v10 h-10 z M40,10 h10 v20 h-10 z M50,40 h20 v10 h-20 z M30,50 h10 v30 h-10 z M60,70 h30 v20 h-30 z M80,60 h10 v10 h-10 z"/>
+            </svg>
+            <div class="absolute inset-0 scanline pointer-events-none"></div>
+          </div>
+
+          <div class="bg-sky-50/80 p-2.5 rounded-xl text-xs space-y-1">
+            <p class="font-extrabold text-slate-900">Código de Viaje: <span class="text-eme font-mono">EME-89321</span></p>
+            <p class="text-slate-500">Pasajero: Juan Carlos Pérez</p>
+            <p class="text-slate-500">Asiento 24 (Piso 2) • Suite Cama</p>
+          </div>
+
+          <p class="text-[11px] text-slate-400">Aumenta el brillo de tu pantalla al mostrar este código al conductor o auxilio.</p>
+
+          <button onclick="closeQRModal()" class="w-full bg-eme text-white font-bold py-2.5 rounded-xl text-xs">
+            Cerrar Pasaje
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL 2: FIRST-TIME USER TUTORIAL (GUÍA AL PRIMER USO CON EMITO) -->
+    <div id="onboarding-modal" class="fixed inset-0 bg-slate-900/85 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+      <div class="bg-white rounded-3xl max-w-sm w-full overflow-hidden shadow-2xl border-2 border-eme text-slate-800">
+        <!-- Tutorial Step Canvas -->
+        <div class="p-6 text-center space-y-4">
+          <div id="tutorial-icon-box" class="w-16 h-16 bg-eme-soft text-eme rounded-2xl mx-auto flex items-center justify-center text-3xl font-bold shadow-inner border border-sky-200">
+            <i class="fa-solid fa-bus text-eme"></i>
+          </div>
+
+          <div>
+            <span id="tutorial-step-tag" class="text-[10px] font-black text-eme uppercase tracking-widest block mb-1">Paso 1 de 3</span>
+            <h3 id="tutorial-title" class="text-xl font-extrabold text-slate-900">Bienvenido a Eme Bus App</h3>
+          </div>
+
+          <p id="tutorial-desc" class="text-xs text-slate-600 leading-relaxed min-h-[60px]">
+            Soy Emito, tu compañero de viaje. Diseñamos esta app para informarte tus andenes, pasajes y ruta en vivo de la manera más sencilla.
+          </p>
+
+          <!-- Carousel Dots -->
+          <div class="flex justify-center space-x-1.5 py-1">
+            <span id="dot-1" class="w-6 h-2 rounded-full bg-eme"></span>
+            <span id="dot-2" class="w-2 h-2 rounded-full bg-slate-300"></span>
+            <span id="dot-3" class="w-2 h-2 rounded-full bg-slate-300"></span>
+          </div>
+
+          <div class="flex gap-2 pt-2">
+            <button id="btn-tutorial-prev" onclick="prevTutorialStep()" class="w-1/3 bg-slate-100 text-slate-600 font-bold py-2.5 rounded-xl text-xs hidden">
+              Atrás
+            </button>
+            <button id="btn-tutorial-next" onclick="nextTutorialStep()" class="flex-1 bg-eme hover:bg-eme-dark text-white font-extrabold py-2.5 rounded-xl text-xs shadow">
+              Siguiente
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL 3: NOTIFICATION ALERT DIALOG -->
+    <div id="alert-modal" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
+      <div class="bg-white rounded-2xl max-w-xs w-full p-5 text-center space-y-3 shadow-xl border border-sky-100">
+        <div id="alert-icon" class="w-12 h-12 rounded-full bg-sky-100 text-eme text-2xl flex items-center justify-center mx-auto">
+          <i class="fa-solid fa-check"></i>
+        </div>
+        <h4 id="alert-title" class="font-extrabold text-slate-900 text-base">Notificación</h4>
+        <p id="alert-msg" class="text-xs text-slate-600 leading-normal">Mensaje de confirmación aquí.</p>
+        <button onclick="closeAlertModal()" class="w-full bg-eme text-white font-bold py-2 rounded-xl text-xs">
+          Entendido
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // GLOBAL APP STATE & VARIABLES
+    let currentTab = 'pasajes';
+    let fontSizeMode = 'normal'; // normal, large, xlarge
+    let isSpeechEnabled = true;
+    let tutorialStep = 1;
+    let map = null;
+    let busMarker = null;
+    let routePolyline = null;
+    let isSimulatingBus = false;
+    let simInterval = null;
+    let currentProgress = 45; // percentage along Santiago -> Concepción route
+
+    // User Profile
+    const userData = {
+      name: "Juan Carlos Pérez",
+      rut: "15.482.903-K",
+      points: 1450,
+      busNumber: "158",
+      origin: "Santiago (Term. Alameda)",
+      destination: "Concepción (Term. Collao)",
+      gate: "Andén 14",
+      departureTime: "14:30"
+    };
+
+    // Route coordinates simulation (Santiago to Concepción via Ruta 5 & Autopista del Itata)
+    const routeCoords = [
+      [-33.4569, -70.6828], // Santiago Alameda
+      [-34.1701, -70.7407], // Rancagua
+      [-34.9854, -71.2394], // Curicó
+      [-35.4264, -71.6554], // Talca
+      [-36.0844, -71.5204], // Linares
+      [-36.6063, -72.1023], // Chillán
+      [-36.8269, -73.0498]  // Concepción Collao
+    ];
+
+    // ON INIT
+    window.onload = function() {
+      initMap();
+      checkFirstUse();
+      getGPSLocation();
+    };
+
+    // TAB NAVIGATION CONTROLLER
+    function switchTab(tabId) {
+      currentTab = tabId;
+
+      // Hide all tabs
+      document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.add('hidden');
+      });
+
+      // Deactivate all nav buttons
+      document.querySelectorAll('.nav-btn').forEach(btn => {
+        btn.classList.remove('active', 'text-eme');
+        btn.classList.add('text-slate-400');
+      });
+
+      // Show target tab
+      const targetTab = document.getElementById('tab-' + tabId);
+      if (targetTab) {
+        targetTab.classList.remove('hidden');
+      }
+
+      // Highlight active nav button
+      const activeNavBtn = document.getElementById('nav-' + tabId);
+      if (activeNavBtn) {
+        activeNavBtn.classList.add('active', 'text-eme');
+        activeNavBtn.classList.remove('text-slate-400');
+      }
+
+      // Special action when entering Map
+      if (tabId === 'map') {
+        setTimeout(() => {
+          if (map) {
+            map.invalidateSize();
+            centerMapOnBus();
+          }
+        }, 200);
+      }
+    }
+
+    // ACCESSIBILITY: TEXT SIZE TOGGLE
+    function toggleFontSize() {
+      const body = document.body;
+      if (fontSizeMode === 'normal') {
+        fontSizeMode = 'large';
+        body.classList.add('text-large');
+        showAlert("Modo Texto Grande", "Se ha aumentado el tamaño de la letra para mayor facilidad de lectura.");
+      } else if (fontSizeMode === 'large') {
+        fontSizeMode = 'xlarge';
+        body.classList.remove('text-large');
+        body.classList.add('text-xlarge');
+        showAlert("Modo Texto Extra Grande", "Tamaño máximo de texto activado.");
+      } else {
+        fontSizeMode = 'normal';
+        body.classList.remove('text-large', 'text-xlarge');
+        showAlert("Tamaño Estándar", "Texto restaurado al tamaño original.");
+      }
+    }
+
+    // ACCESSIBILITY: TEXT-TO-SPEECH READOUT
+    function readActiveStatus() {
+      if (!('speechSynthesis' in window)) {
+        showAlert("Audio no disponible", "Tu navegador no soporta lectura por voz.");
+        return;
+      }
+
+      window.speechSynthesis.cancel(); // Stop current speech
+      const text = `Atención. Tu bus de Eme Bus número 158 sale hoy a las 14:30 horas desde el Andén 14 en el Terminal Alameda Santiago. El bus se encuentra en ruta hacia su destino.`;
+      
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'es-CL';
+      utterance.rate = 0.9;
+      window.speechSynthesis.speak(utterance);
+
+      showAlert("Asistente de Voz Eme Bus", "Reproduciendo información de tu viaje por altavoz...");
+    }
+
+    // GPS TERMINAL FINDER (HTML5 GEOLOCATION API)
+    function getGPSLocation() {
+      const statusText = document.getElementById('terminal-distance-badge');
+      if (navigator.geolocation) {
+        statusText.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Obteniendo coordenadas GPS...`;
+        
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            statusText.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-600"></i> GPS activo: Estás en el Terminal Alameda - Santiago`;
+          },
+          (error) => {
+            // Fallback gracefully
+            statusText.innerHTML = `<i class="fa-solid fa-location-dot"></i> GPS Simulado: Cercano a Terminal Alameda Santiago`;
+          },
+          { timeout: 5000 }
+        );
+      } else {
+        statusText.innerHTML = `<i class="fa-solid fa-location-dot"></i> Terminal Detectado: Alameda Santiago`;
+      }
+    }
+
+    function setSimulatedTerminal(name, address, anden) {
+      document.getElementById('current-terminal-name').innerText = name;
+      document.getElementById('current-terminal-address').innerText = address;
+      document.getElementById('display-anden-number').innerText = anden.toUpperCase();
+      showAlert("Terminal Cambiado", `Ubicación simulada actualizada a ${name}.`);
+    }
+
+    // LEAFLET MAP & BUS ROUTE TRACKER (UPDATED FOR EME BUS ROYAL BLUE AND ORANGE)
+    function initMap() {
+      // Default center around central Chile
+      map = L.map('waze-map', {
+        zoomControl: false
+      }).setView([-35.0, -71.2], 7);
+
+      // OpenStreetMap Tiles with nice contrast
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; EmeBus.cl GPS'
+      }).addTo(map);
+
+      // Draw Route Polyline in Eme Blue
+      routePolyline = L.polyline(routeCoords, {
+        color: '#005696',
+        weight: 6,
+        opacity: 0.85
+      }).addTo(map);
+
+      // Bus Icon - Official Eme Bus colors (Navy, Blue & Orange Accent)
+      const busIcon = L.divIcon({
+        className: 'custom-bus-icon',
+        html: `<div class="bg-eme text-white border-2 border-eme-orange p-2 rounded-full shadow-xl text-center w-9 h-9 flex items-center justify-center">
+                <i class="fa-solid fa-bus text-sm text-yellow-300"></i>
+               </div>`,
+        iconSize: [36, 36],
+        iconAnchor: [18, 18]
+      });
+
+      // Initial Bus Marker Position
+      const currentCoord = getInterpolatedCoord(currentProgress / 100);
+      busMarker = L.marker(currentCoord, { icon: busIcon }).addTo(map);
+      busMarker.bindPopup("<b>Eme Bus Máquina #158</b><br>Velocidad: 88 km/h").openPopup();
+    }
+
+    function getInterpolatedCoord(progress) {
+      const totalSegments = routeCoords.length - 1;
+      const scaled = progress * totalSegments;
+      const index = Math.floor(scaled);
+      const remainder = scaled - index;
+
+      if (index >= totalSegments) return routeCoords[totalSegments];
+
+      const lat = routeCoords[index][0] + (routeCoords[index+1][0] - routeCoords[index][0]) * remainder;
+      const lng = routeCoords[index][1] + (routeCoords[index+1][1] - routeCoords[index][1]) * remainder;
+
+      return [lat, lng];
+    }
+
+    function centerMapOnBus() {
+      if (busMarker && map) {
+        map.setView(busMarker.getLatLng(), 9);
+        busMarker.openPopup();
+      }
+    }
+
+    // SIMULATION CONTROLS FOR ROUTE
+    function updateBusSimulationPosition(val) {
+      currentProgress = parseFloat(val);
+      document.getElementById('route-percent-text').innerText = Math.round(currentProgress) + '%';
+      document.getElementById('route-progress-bar').style.width = currentProgress + '%';
+
+      const coord = getInterpolatedCoord(currentProgress / 100);
+      if (busMarker) {
+        busMarker.setLatLng(coord);
+      }
+
+      // Dynamic Speed Display
+      const speeds = [0, 78, 88, 92, 85, 90, 65];
+      const spdIndex = Math.floor((currentProgress/100) * (speeds.length-1));
+      document.getElementById('bus-speed-display').innerText = speeds[spdIndex] + ' km/h';
+    }
+
+    function toggleBusSimulation() {
+      const btn = document.getElementById('btn-sim-toggle');
+      if (isSimulatingBus) {
+        clearInterval(simInterval);
+        isSimulatingBus = false;
+        btn.innerHTML = `<i class="fa-solid fa-play text-[10px]"></i> Iniciar Avance`;
+      } else {
+        isSimulatingBus = true;
+        btn.innerHTML = `<i class="fa-solid fa-pause text-[10px]"></i> Pausar Avance`;
+        simInterval = setInterval(() => {
+          if (currentProgress < 100) {
+            currentProgress += 0.5;
+            document.getElementById('sim-slider').value = currentProgress;
+            updateBusSimulationPosition(currentProgress);
+          } else {
+            clearInterval(simInterval);
+            isSimulatingBus = false;
+            btn.innerHTML = `<i class="fa-solid fa-play text-[10px]"></i> Reiniciar Avance`;
+          }
+        }, 300);
+      }
+    }
+
+    // HIGHWAY RADAR LOGIC
+    function updateHighwayRadar() {
+      const select = document.getElementById('highway-stop-select').value;
+      const distEl = document.getElementById('highway-bus-dist');
+      const timeEl = document.getElementById('highway-bus-time');
+
+      if (select === 'cruce-agua') {
+        distEl.innerText = "3.8 km";
+        timeEl.innerText = "6 minutos";
+      } else if (select === 'peaje-quepe') {
+        distEl.innerText = "12.4 km";
+        timeEl.innerText = "14 minutos";
+      } else if (select === 'parada-cabrero') {
+        distEl.innerText = "1.2 km";
+        timeEl.innerText = "2 minutos";
+      } else {
+        distEl.innerText = "8.5 km";
+        timeEl.innerText = "10 minutos";
+      }
+    }
+
+    function triggerHighwayAudioNotice() {
+      showAlert("Alerta Sonora Activada", "Tu celular emitirá un sonido fuerte cuando la máquina #158 esté a 1 km de tu cruce.");
+      if ('speechSynthesis' in window) {
+        const text = "Alerta activada. Te avisaremos cuando el bus esté a menos de cinco minutos de tu parada en carretera.";
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'es-CL';
+        window.speechSynthesis.speak(utterance);
+      }
+    }
+
+    // EME PUNTOS SYSTEM
+    function simulateAddPoints() {
+      userData.points += 150;
+      document.getElementById('header-points').innerText = userData.points.toLocaleString() + ' pts';
+      document.getElementById('puntos-total-amount').innerText = userData.points.toLocaleString() + ' pts';
+      showAlert("¡Puntos Acumulados!", "Has acreditado +150 Eme Puntos por tu viaje realizado.");
+    }
+
+    function redeemBenefit(title, cost) {
+      if (userData.points >= cost) {
+        userData.points -= cost;
+        document.getElementById('header-points').innerText = userData.points.toLocaleString() + ' pts';
+        document.getElementById('puntos-total-amount').innerText = userData.points.toLocaleString() + ' pts';
+        showAlert("Canje Exitoso", `Has canjeado "${title}" por ${cost} puntos.`);
+      } else {
+        showAlert("Puntos Insuficientes", `Necesitas ${cost} puntos para canjear este beneficio.`);
+      }
+    }
+
+    // CLAIMS FORM
+    function handleClaimSubmit(e) {
+      e.preventDefault();
+      const cat = document.getElementById('claim-category').value;
+      showAlert("Reclamo/Consulta Enviada", `Tu ticket de atención #${Math.floor(100000 + Math.random() * 900000)} sobre "${cat}" ha sido registrado. Te responderemos por email y WhatsApp.`);
+      document.getElementById('claim-form').reset();
+    }
+
+    function openWhatsAppSim() {
+      showAlert("WhatsApp Eme Bus", "Redirigiendo al canal oficial de atención vía WhatsApp (+56 9 1234 5678)...");
+    }
+
+    // ONBOARDING TUTORIAL MODAL
+    function checkFirstUse() {
+      if (!localStorage.getItem('eme_app_onboarded')) {
+        openOnboardingModal();
+      }
+    }
+
+    function openOnboardingModal() {
+      tutorialStep = 1;
+      updateTutorialStepView();
+      document.getElementById('onboarding-modal').classList.remove('hidden');
+    }
+
+    function updateTutorialStepView() {
+      const iconBox = document.getElementById('tutorial-icon-box');
+      const stepTag = document.getElementById('tutorial-step-tag');
+      const title = document.getElementById('tutorial-title');
+      const desc = document.getElementById('tutorial-desc');
+      const prevBtn = document.getElementById('btn-tutorial-prev');
+      const nextBtn = document.getElementById('btn-tutorial-next');
+
+      document.getElementById('dot-1').className = tutorialStep === 1 ? 'w-6 h-2 rounded-full bg-eme' : 'w-2 h-2 rounded-full bg-slate-300';
+      document.getElementById('dot-2').className = tutorialStep === 2 ? 'w-6 h-2 rounded-full bg-eme' : 'w-2 h-2 rounded-full bg-slate-300';
+      document.getElementById('dot-3').className = tutorialStep === 3 ? 'w-6 h-2 rounded-full bg-eme' : 'w-2 h-2 rounded-full bg-slate-300';
+
+      if (tutorialStep === 1) {
+        iconBox.innerHTML = `<i class="fa-solid fa-ticket text-eme text-3xl"></i>`;
+        stepTag.innerText = "Paso 1 de 3";
+        title.innerText = "Tus Pasajes en Digital";
+        desc.innerText = "Muestra tu código QR directo al conductor desde tu teléfono sin necesidad de imprimir nada.";
+        prevBtn.classList.add('hidden');
+        nextBtn.innerText = "Siguiente";
+      } else if (tutorialStep === 2) {
+        iconBox.innerHTML = `<i class="fa-solid fa-location-dot text-eme text-3xl"></i>`;
+        stepTag.innerText = "Paso 2 de 3";
+        title.innerText = "Encuentra tu Andén con GPS";
+        desc.innerText = "La app detecta el terminal en el que te encuentras y te avisa el número de andén exacto de salida.";
+        prevBtn.classList.remove('hidden');
+        nextBtn.innerText = "Siguiente";
+      } else if (tutorialStep === 3) {
+        iconBox.innerHTML = `<i class="fa-solid fa-star text-eme text-3xl"></i>`;
+        stepTag.innerText = "Paso 3 de 3";
+        title.innerText = "Eme Puntos & Waze en Vivo";
+        desc.innerText = "Sigue la ruta en tiempo real mientras viajas y acumula puntos con cada pasaje para canjear descuentos.";
+        prevBtn.classList.remove('hidden');
+        nextBtn.innerText = "¡Comenzar a Usar!";
+      }
+    }
+
+    function nextTutorialStep() {
+      if (tutorialStep < 3) {
+        tutorialStep++;
+        updateTutorialStepView();
+      } else {
+        localStorage.setItem('eme_app_onboarded', 'true');
+        document.getElementById('onboarding-modal').classList.add('hidden');
+        showAlert("¡Todo Listo!", "Bienvenido a la experiencia oficial de Eme Bus.");
+      }
+    }
+
+    function prevTutorialStep() {
+      if (tutorialStep > 1) {
+        tutorialStep--;
+        updateTutorialStepView();
+      }
+    }
+
+    // MODAL UTILITIES
+    function openQRModal() {
+      document.getElementById('qr-modal').classList.remove('hidden');
+    }
+
+    function closeQRModal() {
+      document.getElementById('qr-modal').classList.add('hidden');
+    }
+
+    function showAlert(title, message) {
+      document.getElementById('alert-title').innerText = title;
+      document.getElementById('alert-msg').innerText = message;
+      document.getElementById('alert-modal').classList.remove('hidden');
+    }
+
+    function closeAlertModal() {
+      document.getElementById('alert-modal').classList.add('hidden');
+    }
+  </script>
+</body>
+</html>
